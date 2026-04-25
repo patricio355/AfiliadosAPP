@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -8,7 +9,6 @@ import { authenticate } from "../shopify.server";
 
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import "@shopify/polaris/build/esm/styles.css";
 
 const isDebug = process.env.NODE_ENV !== "production";
 
@@ -171,17 +171,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   return (
     <PolarisProvider i18n={enTranslations}>
       <AppProvider embedded apiKey={apiKey}>
-        <NavMenu>
-        
-          <a href="/app" rel="home">Dashboard</a>
-
-         
-          <a href="/app/affiliates">Gestión de Afiliados</a>
-        </NavMenu>
+        {isClient ? (
+          <NavMenu>
+            <a href="/app" rel="home">Dashboard</a>
+            <a href="/app/affiliates">Gestión de Afiliados</a>
+          </NavMenu>
+        ) : null}
         <Outlet />
       </AppProvider>
     </PolarisProvider>

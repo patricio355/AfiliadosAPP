@@ -4,20 +4,48 @@ register(({analytics, browser, settings}) => {
   console.log('affiliate-tracker pixel loaded', {
     appUrl: settings.app_url,
   });
+
+  const getShopDomain = (event: { context?: { document?: { location?: { hostname?: string } }; window?: { location?: { hostname?: string } } } }) => {
+    return (
+      settings.shop_domain ||
+      event.context?.document?.location?.hostname ||
+      event.context?.window?.location?.hostname ||
+      ""
+    );
+  };
+
+  const buildConversionUrl = () => {
+    return new URL('/api/conversion', settings.app_url).toString();
+  };
  
   analytics.subscribe('page_viewed', async (event) => {
     const url = new URL(event.context.document.location.href);
     const affiliateHandle = url.searchParams.get('ref');
+    const clientId = event.clientId;
+    const shopDomain = getShopDomain(event);
 
     console.log('affiliate-tracker page_viewed', {
       href: url.href,
       affiliateHandle,
+      clientId,
     });
     
     if (affiliateHandle) {
-      await browser.cookie.set('affiliate_ref', affiliateHandle);
+      await browser.cookie.set(`affiliate_ref=${affiliateHandle}; path=/; max-age=2592000; SameSite=Lax`);
       await browser.localStorage.setItem('affiliate_ref', affiliateHandle);
       await browser.sessionStorage.setItem('affiliate_ref', affiliateHandle);
+      await fetch(buildConversionUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          affiliateHandle,
+          clientId,
+          shop: shopDomain,
+        }),
+        keepalive: true,
+      });
       console.log('Afiliado detectado:', affiliateHandle);
     } else {
       console.log('affiliate-tracker page_viewed sin ref');
@@ -30,9 +58,13 @@ register(({analytics, browser, settings}) => {
       (await browser.cookie.get('affiliate_ref')) ||
       (await browser.localStorage.getItem('affiliate_ref')) ||
       (await browser.sessionStorage.getItem('affiliate_ref'));
+    const clientId = event.clientId;
+    const shopDomain = getShopDomain(event);
+    const conversionUrl = buildConversionUrl();
 
     console.log('affiliate-tracker checkout_completed', {
       affiliateHandle,
+      clientId,
       hasCheckout: Boolean(event.data.checkout),
       eventId: event.id,
     });
@@ -45,7 +77,7 @@ register(({analytics, browser, settings}) => {
         return;
       }
 
-      const shopifyOrderId = checkout.order?.id || checkout.id || event.id;
+      const shopifyOrderId = checkout.order?.id || event.id;
       if (!shopifyOrderId) {
         console.log('affiliate-tracker checkout_completed sin shopifyOrderId');
         return;
@@ -53,27 +85,23 @@ register(({analytics, browser, settings}) => {
       
       const payload = {
         affiliateHandle: affiliateHandle,
+        clientId,
         shopifyOrderId,
         totalAmount: checkout.totalPrice.amount,
-        shop:
-          settings.shop_domain ||
-          event.context?.document?.location?.hostname ||
-          event.context?.window?.location?.hostname ||
-          "",
+        shop: shopDomain,
       };
 
       console.log('affiliate-tracker sending conversion', payload);
 
       
       try {
-        const response = await fetch(new URL('/api/conversion', settings.app_url).toString(), {
+        const response = await fetch(conversionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
           keepalive: true,
-          mode: 'cors',
         });
 
         if (!response.ok) {

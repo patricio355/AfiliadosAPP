@@ -33,12 +33,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const corsHeaders = createCorsHeaders(request.headers.get("Origin"));
 
   // 1. Recibir datos del pixel
-  const { affiliateHandle, shopifyOrderId, totalAmount, shop } = await request.json();
+  const { affiliateHandle, clientId, shopifyOrderId, totalAmount, shop } = await request.json();
   const amount = Number(totalAmount);
 
   if (isDebug) {
     console.log("[conversion] incoming", {
       affiliateHandle,
+      clientId,
       shopifyOrderId,
       totalAmount,
       amount,
@@ -46,10 +47,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  if (!shop || !affiliateHandle || !shopifyOrderId || Number.isNaN(amount)) {
+  if (affiliateHandle && clientId && !shopifyOrderId) {
+    await db.affiliateAttribution.upsert({
+      where: { clientId },
+      update: {
+        affiliateHandle,
+        shop: shop ?? null,
+      },
+      create: {
+        clientId,
+        affiliateHandle,
+        shop: shop ?? null,
+      },
+    });
+
+    if (isDebug) {
+      console.log("[conversion] attribution stored", {
+        clientId,
+        affiliateHandle,
+        shop,
+      });
+    }
+
+    return Response.json({ success: true, tracked: true }, { headers: corsHeaders });
+  }
+
+  let resolvedAffiliateHandle = affiliateHandle;
+
+  if (!resolvedAffiliateHandle && clientId) {
+    const attribution = await db.affiliateAttribution.findUnique({
+      where: { clientId },
+    });
+
+    resolvedAffiliateHandle = attribution?.affiliateHandle;
+  }
+
+  if (!shop || !resolvedAffiliateHandle || !shopifyOrderId || Number.isNaN(amount)) {
     if (isDebug) {
       console.warn("[conversion] invalid payload", {
         affiliateHandle,
+        clientId,
+        resolvedAffiliateHandle,
         shopifyOrderId,
         totalAmount,
         amount,
@@ -76,12 +114,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   
   const affiliate = await db.affiliate.findUnique({
-    where: { handle: affiliateHandle },
+    where: { handle: resolvedAffiliateHandle },
   });
 
   if (!affiliate) {
     if (isDebug) {
-      console.warn("[conversion] affiliate not found", { affiliateHandle });
+      console.warn("[conversion] affiliate not found", { affiliateHandle: resolvedAffiliateHandle });
     }
     return Response.json({ error: "Afiliado no encontrado" }, { status: 404, headers: corsHeaders });
   }
