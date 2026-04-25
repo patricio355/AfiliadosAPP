@@ -1,0 +1,29 @@
+name = "affiliate-tracker"
+type = "web_pixel_extension"
+uid = "98abf6e4-5075-4aac-8ecd-f454dc4585a7b34de535"
+
+runtime_context = "strict"
+
+[settings]
+type = "object"
+
+[settings.fields.app_url]
+name = "App URL"
+description = "Public URL of the app used by the pixel to send conversion events"
+type = "single_line_text_field"
+validations =  [
+  { name = "min", value = "1" }
+]
+
+[settings.fields.accountID]
+name = "Account ID"
+description = "Account ID"
+type = "single_line_text_field"
+validations =  [
+  { name = "min", value = "1" }
+]
+
+[settings.fields.shop_domain]
+name = "Shop Domain"
+description = "Canonical myshopify domain for server-side conversion registration"
+type = "single_line_text_field"
